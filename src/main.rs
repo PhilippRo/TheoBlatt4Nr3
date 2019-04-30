@@ -8,29 +8,60 @@ use std::vec::Vec;
 
 fn main() {
     // calculates first layer of functions
+    let gerade_z=spawn(|| {
+        let mut result =
+            exermine_peak(1000, 0.0, 200.0, 1.0, 1000000, 0.0, 0.0, 1.0, 40.0).iter().map(|(e,(xs, _))|
+                (*e, xs.len() as f64)).collect();
+        plot_tuples(&result);
+        for _ in 0..5{
+            let mut peaks: Vec<JoinHandle<Vec<(f64,f64)>>> = Vec::new();
+            for(e_start, e_end) in find_peaks(&result) {
+                peaks.push(spawn( move ||
+                    exermine_peak(100, 0.0, 200.0, 1.0, 1000000, 1.0, 0.0, e_start, e_end).iter()
+                    .map(|(e,(xs,_))| (*e, xs.len() as f64)).collect()));
+            }
 
-    let fs_fn = exermine_peak(100, 0.0, 200.0, 1.0, 1000000, 1.0, 0.0, 0.0, 40.0);
-    plot_tuples(&fs_fn.iter().map(|(e, (xs, _))| (*e, xs.len() as f64)).collect());
+            for peak in peaks{
+                result.extend(peak.join().unwrap().iter());
+            }
+            result.sort_by(|(e, _), (e1, _)| e.partial_cmp(e1).unwrap());
+            println!("{}", result.len());
+        }
+        result
+    });
 
     // find ungerade zustände
-    let mut peaks: Vec<JoinHandle<Vec<(f64,f64)>>> = Vec::new();
-    let mut result =
-        exermine_peak(100, 0.0, 200.0, 1.0, 1000000, 0.0, 1.0, 0.0, 40.0).iter().map(|(e,(xs, ys))|
-            (*e, xs.len() as f64)).collect();
+    let ungerade_z = spawn(|| {
+        let mut result =
+            exermine_peak(1000, 0.0, 200.0, 1.0, 1000000, 0.0, 1.0, 0.0, 40.0).iter().map(|(e,(xs, _))|
+                (*e, xs.len() as f64)).collect();
+        plot_tuples(&result);
+        for _ in 0..5{
+            let mut peaks: Vec<JoinHandle<Vec<(f64,f64)>>> = Vec::new();
+            for(e_start, e_end) in find_peaks(&result) {
+                peaks.push(spawn( move ||
+                    exermine_peak(100, 0.0, 200.0, 1.0, 1000000, 0.0, 1.0, e_start, e_end).iter()
+                    .map(|(e,(xs,_))| (*e, xs.len() as f64)).collect()));
+            }
 
-    for(e_start, e_end) in find_peaks(&result) {
-        peaks.push(spawn( move ||
-            exermine_peak(100, 0.0, 200.0, 1.0, 1000000, 0.0, 1.0, e_start, e_end).iter()
-            .map(|(e,(xs,_))| (*e, xs.len() as f64)).collect()));
+            for peak in peaks{
+                result.extend(peak.join().unwrap().iter());
+            }
+            result.sort_by(|(e, _), (e1, _)| e.partial_cmp(e1).unwrap());
+            println!("{}", result.len());
+        }
+        result
+    });
+
+    let g_eigenvals = gerade_z.join().unwrap();
+    let u_eigenvals = ungerade_z.join().unwrap();
+
+    for (e, _) in find_peaks(&g_eigenvals){
+        println!("gerade eigenwerte  : {}", e);
     }
-
-    for peak in peaks{
-        result.extend(peak.join().unwrap().iter());
+    for (e, _) in find_peaks(&u_eigenvals){
+        println!("ungerade eigenwerte: {}", e);
     }
-    result.sort_by(|(e, _), (e1, _)| e.partial_cmp(e1).unwrap());
-
-    plot_tuples(&result);
-
 }
 
 fn find_peaks(input: &Vec<(f64, f64)>) -> Vec<(f64, f64)>{
@@ -39,7 +70,9 @@ fn find_peaks(input: &Vec<(f64, f64)>) -> Vec<(f64, f64)>{
 
     loop {
         // rising edge
+        #[warn(unused_assignments)]
         let mut fst_x = 0.0;
+        #[warn(unused_assignments)]
         let mut fst_y = 0.0;
         match iter.next(){
             Some((sfst_x, sfst_y)) => {
