@@ -2,21 +2,73 @@ extern crate gnuplot;
 
 use gnuplot::{Figure, Caption, Color};
 
+use std::thread::spawn;
+use std::thread::JoinHandle;
 use std::vec::Vec;
 
 fn main() {
     // calculates first layer of functions
-    let many = 300;
-    let e = 40.0;
 
-    let fs_fn = (0..many).map(|e_m|{
-        println!("{}", e_m);
-        (e_m as f64 * e as f64 / many as f64 ,
-        numerov(0.0, 200.0, 1.0, 1000000, 1.0, 0.0,
-            |x| e_m as f64* e as f64 / many as f64 - x*x, |_| 0.0))}).collect::<Vec<_>>();
+    //let fs_fn = exermine_peak(100, 0.0, 200.0, 1.0, 1000000, 1.0, 0.0, 0.0, 40.0);
+    //plot_tuples(&fs_fn.iter().map(|(e, (xs, _))| (*e, xs.len() as f64)).collect());
 
-    let plt = fs_fn.iter().map(
-        |(e, (xs, _))| (*e, xs.len() as f64)).collect::<Vec<(f64, f64)>>();
+    // find ungerade zustände
+    let mut result: Vec<(f64, f64)> = Vec::new();
+    let mut peaks: Vec<JoinHandle<Vec<(f64,f64)>>> = Vec::new();
+    let mut ev_found : usize = 0;
+    let mut e: f64 = 0.0;
+    let e_step = 0.5;
+    while ev_found <= 9 {
+        // rising edge
+        let (xs, _) = numerov(0.0, 200.0, 1.0, 1000000, 0.0, 1.0,
+            |x| e - x*x, |_| 0.0);
+        let mut fst_len = xs.len() as f64;
+        result.push(( e, fst_len));
+        loop {
+            e = e + e_step;
+            let (xs, _) = numerov(0.0, 200.0, 1.0, 1000000, 0.0, 1.0,
+                |x| e - x*x, |_| 0.0);
+            let snd_len = xs.len() as f64;
+            if snd_len < fst_len  {
+                break;
+            }
+            fst_len = snd_len;
+            result.push(( e, fst_len));
+        }
+        // exermine peak
+        peaks.push(spawn( move ||
+            exermine_peak(100, 0.0, 200.0, 1.0, 1000000, 0.0, 1.0, e - 2.0 * e_step, e).iter()
+            .map(|(e,(xs,_))| (*e, xs.len() as f64)).collect()));
+
+        println!("{}", e);
+        ev_found = ev_found + 1;
+        println!("{}",ev_found);
+        //rising edge
+        let (xs, _) = numerov(0.0, 200.0, 1.0, 1000000, 0.0, 1.0,
+            |x| e - x*x, |_| 0.0);
+        let mut fst_len = xs.len() as f64;
+        result.push(( e, fst_len));
+        loop {
+            e = e + e_step;
+            let (xs, _) = numerov(0.0, 200.0, 1.0, 1000000, 0.0, 1.0,
+                |x| e - x*x, |_| 0.0);
+            let snd_len = xs.len() as f64;
+            if snd_len > fst_len  {
+                break;
+            }
+            fst_len = snd_len;
+            result.push(( e, fst_len));
+        }
+    }
+    for peak in peaks{
+        result.extend(peak.join().unwrap().iter());
+    }
+    result.sort_by(|(e, _), (e1, _)| e.partial_cmp(e1).unwrap());
+    plot_tuples(&result);
+
+}
+
+fn plot_tuples(plt: &Vec<(f64, f64)>) {
     let xs = plt.iter().map(|(x, _)| *x).collect::<Vec<f64>>();
     let ys = plt.iter().map(|(_,y)| *y).collect::<Vec<f64>>();
 
@@ -25,6 +77,14 @@ fn main() {
     f.show();
 }
 
+fn exermine_peak(many: usize, start_x: f64, end_x: f64, threshold: f64, steps: usize, y: f64,
+    y_s: f64, start_e: f64, end_e: f64) -> Vec<(f64, (Vec<f64>, Vec<f64>))>{
+
+    (0..many).map(|e_m|{
+        let my_e = (end_e - start_e) * e_m as f64 / many as f64 + start_e;
+        (my_e , numerov(start_x, end_x, threshold, steps, y, y_s,
+            |x| my_e - x*x, |_| 0.0))}).collect::<Vec<_>>()
+}
 
 fn numerov<ST: FnMut(f64) -> f64, GT: FnMut(f64) -> f64>(x_0: f64, x_n: f64, thr: f64,
     n: usize, y_0: f64, y_1: f64, para_g: GT, para_s: ST) -> (Vec<f64>, Vec<f64>) {
