@@ -25,25 +25,50 @@ fn main() {
 }
 
 fn fn_eigenvalues(f_0: f64, f_0_s: f64) -> Vec<f64>{
-        let mut result =
-            exermine_peak(1000, 0.0, 200.0, 1.0, 1000000, 0.0, f_0, f_0_s, 40.0).iter().map(|(e,(xs, _))|
-                (*e, xs.len() as f64)).collect();
-        plot_tuples(&result);
-        for _ in 0..5{
-            let mut peaks: Vec<JoinHandle<Vec<(f64,f64)>>> = Vec::new();
-            for(e_start, e_end) in find_peaks(&result) {
-                peaks.push(spawn( move ||
-                    exermine_peak(100, 0.0, 200.0, 1.0, 1000000, 1.0, 0.0, e_start, e_end).iter()
-                    .map(|(e,(xs,_))| (*e, xs.len() as f64)).collect()));
-            }
-
-            for peak in peaks{
-                result.extend(peak.join().unwrap().iter());
-            }
-            result.sort_by(|(e, _), (e1, _)| e.partial_cmp(e1).unwrap());
-            println!("{}", result.len());
+    let mut result =
+        exermine_peak(1000, 0.0, 200.0, 1.0, 1000000, 0.0, f_0, f_0_s, 40.0).iter().map(|(e,(xs, _))|
+            (*e, xs.len() as f64)).collect();
+    plot_tuples(&result);
+        let mut peaks: Vec<JoinHandle<f64>> = Vec::new();
+        for(p_e_start, p_e_end) in find_peaks(&result) {
+            peaks.push(spawn( move || {
+                let mut e_start = p_e_start;
+                let mut e_end = p_e_end;
+                for _ in 0..5{
+                    let f = exermine_peak(100, 0.0, 200.0, 1.0, 1000000, 1.0, 0.0, e_start, e_end).iter()
+                        .map(|(e,(xs,_))| (*e, xs.len() as f64)).collect();
+                    let peaks = find_peaks(&f);
+                    if peaks.len() == 0 {
+                        let peak = f.iter().fold((0.0, 0.0), |(_,a), (e, x)|{
+                            if *x <= a{
+                                (*e, a)
+                            }else{
+                                (*e, *x)
+                            }
+                        });
+                        let (peak_e, _) = peak;
+                        let mut start = peak_e - (e_end - e_start);
+                        let mut end  = peak_e + (e_end - e_start);
+                        if start < e_start {
+                            e_start = start;
+                        }
+                        if end > e_end {
+                            e_end = end;
+                        }
+                    } else {
+                        e_start=peaks[0].0;
+                        e_end = peaks[0].1;
+                    }
+                }
+                0.5 * (e_start+ e_end)
+            }));
         }
-        find_peaks(&result).iter().map(|(e, _)| *e).collect()
+
+        let mut return_v = Vec::new();
+        for peak in peaks{
+            return_v.push(peak.join().unwrap());
+        }
+        return_v
 }
 
 fn find_peaks(input: &Vec<(f64, f64)>) -> Vec<(f64, f64)>{

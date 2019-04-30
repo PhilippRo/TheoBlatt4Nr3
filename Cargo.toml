@@ -3,6 +3,7 @@ name = "theo3_4"
 version = "0.1.0"
 authors = ["PR"]
 edition = "2018"
+cargo-features = ["edition"]
 
 [dependencies]
 gnuplot = "0.0.31"
