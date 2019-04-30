@@ -9,63 +9,85 @@ use std::vec::Vec;
 fn main() {
     // calculates first layer of functions
 
-    //let fs_fn = exermine_peak(100, 0.0, 200.0, 1.0, 1000000, 1.0, 0.0, 0.0, 40.0);
-    //plot_tuples(&fs_fn.iter().map(|(e, (xs, _))| (*e, xs.len() as f64)).collect());
+    let fs_fn = exermine_peak(100, 0.0, 200.0, 1.0, 1000000, 1.0, 0.0, 0.0, 40.0);
+    plot_tuples(&fs_fn.iter().map(|(e, (xs, _))| (*e, xs.len() as f64)).collect());
 
     // find ungerade zustände
-    let mut result: Vec<(f64, f64)> = Vec::new();
     let mut peaks: Vec<JoinHandle<Vec<(f64,f64)>>> = Vec::new();
-    let mut ev_found : usize = 0;
-    let mut e: f64 = 0.0;
-    let e_step = 0.5;
-    while ev_found <= 9 {
-        // rising edge
-        let (xs, _) = numerov(0.0, 200.0, 1.0, 1000000, 0.0, 1.0,
-            |x| e - x*x, |_| 0.0);
-        let mut fst_len = xs.len() as f64;
-        result.push(( e, fst_len));
-        loop {
-            e = e + e_step;
-            let (xs, _) = numerov(0.0, 200.0, 1.0, 1000000, 0.0, 1.0,
-                |x| e - x*x, |_| 0.0);
-            let snd_len = xs.len() as f64;
-            if snd_len < fst_len  {
-                break;
-            }
-            fst_len = snd_len;
-            result.push(( e, fst_len));
-        }
-        // exermine peak
-        peaks.push(spawn( move ||
-            exermine_peak(100, 0.0, 200.0, 1.0, 1000000, 0.0, 1.0, e - 2.0 * e_step, e).iter()
-            .map(|(e,(xs,_))| (*e, xs.len() as f64)).collect()));
+    let mut result =
+        exermine_peak(100, 0.0, 200.0, 1.0, 1000000, 0.0, 1.0, 0.0, 40.0).iter().map(|(e,(xs, ys))|
+            (*e, xs.len() as f64)).collect();
 
-        println!("{}", e);
-        ev_found = ev_found + 1;
-        println!("{}",ev_found);
-        //rising edge
-        let (xs, _) = numerov(0.0, 200.0, 1.0, 1000000, 0.0, 1.0,
-            |x| e - x*x, |_| 0.0);
-        let mut fst_len = xs.len() as f64;
-        result.push(( e, fst_len));
-        loop {
-            e = e + e_step;
-            let (xs, _) = numerov(0.0, 200.0, 1.0, 1000000, 0.0, 1.0,
-                |x| e - x*x, |_| 0.0);
-            let snd_len = xs.len() as f64;
-            if snd_len > fst_len  {
-                break;
-            }
-            fst_len = snd_len;
-            result.push(( e, fst_len));
-        }
+    for(e_start, e_end) in find_peaks(&result) {
+        peaks.push(spawn( move ||
+            exermine_peak(100, 0.0, 200.0, 1.0, 1000000, 0.0, 1.0, e_start, e_end).iter()
+            .map(|(e,(xs,_))| (*e, xs.len() as f64)).collect()));
     }
+
     for peak in peaks{
         result.extend(peak.join().unwrap().iter());
     }
     result.sort_by(|(e, _), (e1, _)| e.partial_cmp(e1).unwrap());
+
     plot_tuples(&result);
 
+}
+
+fn find_peaks(input: &Vec<(f64, f64)>) -> Vec<(f64, f64)>{
+    let mut result: Vec<(f64, f64)> = Vec::new();
+    let mut iter = input.iter();
+
+    loop {
+        // rising edge
+        let mut fst_x = 0.0;
+        let mut fst_y = 0.0;
+        match iter.next(){
+            Some((sfst_x, sfst_y)) => {
+                fst_x = *sfst_x;
+                fst_y = *sfst_y;
+            },
+            None => {break},
+        }
+        loop {
+            match iter.next() {
+                Some((x, y)) => {
+                    if fst_y < *y {
+                            break;
+                        }
+                    fst_x = *x;
+                    fst_y = *y;
+                },
+                None => break,
+            }
+        }
+
+        match iter.next(){
+            Some((end_peak, _)) => result.push((fst_x , *end_peak)),
+            None => break
+        }
+
+        //falling edge
+        match iter.next(){
+            Some((sfst_x, sfst_y)) => {
+                fst_x = *sfst_x;
+                fst_y = *sfst_y;
+            },
+            None => {break},
+        }
+        loop {
+            match iter.next() {
+                Some((x, y)) => {
+                    if fst_y > *y {
+                            break;
+                        }
+                    fst_x = *x;
+                    fst_y = *y;
+                },
+                None => break,
+            }
+        }
+    }
+    result
 }
 
 fn plot_tuples(plt: &Vec<(f64, f64)>) {
