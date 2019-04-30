@@ -8,9 +8,25 @@ use std::vec::Vec;
 
 fn main() {
     // calculates first layer of functions
-    let gerade_z=spawn(|| {
+    let gerade_z=spawn(|| fn_eigenvalues(1.0, 0.0));
+
+    // find ungerade zustände
+    let ungerade_z = spawn(||fn_eigenvalues(0.0, 1.0));
+
+    let g_eigenvals = gerade_z.join().unwrap();
+    let u_eigenvals = ungerade_z.join().unwrap();
+
+    for e in g_eigenvals{
+        println!("gerade eigenwerte  : {}", e);
+    }
+    for e in u_eigenvals{
+        println!("ungerade eigenwerte: {}", e);
+    }
+}
+
+fn fn_eigenvalues(f_0: f64, f_0_s: f64) -> Vec<f64>{
         let mut result =
-            exermine_peak(1000, 0.0, 200.0, 1.0, 1000000, 0.0, 0.0, 1.0, 40.0).iter().map(|(e,(xs, _))|
+            exermine_peak(1000, 0.0, 200.0, 1.0, 1000000, 0.0, f_0, f_0_s, 40.0).iter().map(|(e,(xs, _))|
                 (*e, xs.len() as f64)).collect();
         plot_tuples(&result);
         for _ in 0..5{
@@ -27,41 +43,7 @@ fn main() {
             result.sort_by(|(e, _), (e1, _)| e.partial_cmp(e1).unwrap());
             println!("{}", result.len());
         }
-        result
-    });
-
-    // find ungerade zustände
-    let ungerade_z = spawn(|| {
-        let mut result =
-            exermine_peak(1000, 0.0, 200.0, 1.0, 1000000, 0.0, 1.0, 0.0, 40.0).iter().map(|(e,(xs, _))|
-                (*e, xs.len() as f64)).collect();
-        plot_tuples(&result);
-        for _ in 0..5{
-            let mut peaks: Vec<JoinHandle<Vec<(f64,f64)>>> = Vec::new();
-            for(e_start, e_end) in find_peaks(&result) {
-                peaks.push(spawn( move ||
-                    exermine_peak(100, 0.0, 200.0, 1.0, 1000000, 0.0, 1.0, e_start, e_end).iter()
-                    .map(|(e,(xs,_))| (*e, xs.len() as f64)).collect()));
-            }
-
-            for peak in peaks{
-                result.extend(peak.join().unwrap().iter());
-            }
-            result.sort_by(|(e, _), (e1, _)| e.partial_cmp(e1).unwrap());
-            println!("{}", result.len());
-        }
-        result
-    });
-
-    let g_eigenvals = gerade_z.join().unwrap();
-    let u_eigenvals = ungerade_z.join().unwrap();
-
-    for (e, _) in find_peaks(&g_eigenvals){
-        println!("gerade eigenwerte  : {}", e);
-    }
-    for (e, _) in find_peaks(&u_eigenvals){
-        println!("ungerade eigenwerte: {}", e);
-    }
+        find_peaks(&result).iter().map(|(e, _)| *e).collect()
 }
 
 fn find_peaks(input: &Vec<(f64, f64)>) -> Vec<(f64, f64)>{
