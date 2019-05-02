@@ -19,14 +19,33 @@ fn main() {
     for e in g_eigenvals{
         println!("gerade eigenwerte  : {}", e);
     }
-    for e in u_eigenvals{
-        println!("ungerade eigenwerte: {}", e);
+    for e in u_eigenvals.iter(){
+        println!("ungerade eigenwerte: {}", *e);
     }
+
+    let mut join = u_eigenvals.into_iter().map(|e| spawn(move||(e, calc_av_energy(e))));
+    for j in join{
+        let (e, energy) = j.join().unwrap();
+        println!("eigenval: {}, energy: {}", e, energy);
+    }
+}
+
+fn calc_av_energy(en: f64) -> f64  {
+    let (xs, ys) = numerov(0.0, 10.0, 100.0, 10_000, 0.0, 1.0, |x|x*x*x*x, |_| 0.0);
+
+
+    //calc the integral
+    let mut res: f64 = 0.0;
+    let step_size = xs[1] - xs[0];
+    for i in 0..xs.len() {
+        res = res + (ys[i]*ys[i] * xs[i] * xs[i] * xs[i] * xs[i])* step_size;
+    }
+    return 2.0*res;
 }
 
 fn fn_eigenvalues(f_0: f64, f_0_s: f64) -> Vec<f64>{
     let mut result =
-        exermine_peak(1000, 0.0, 200.0, 1.0, 1000000, 0.0, f_0, f_0_s, 40.0).iter().map(|(e,(xs, _))|
+        exermine_peak(100, 0.0, 200.0, 1.0, 1000000, f_0, f_0_s, 0.0, 200.0).iter().map(|(e,(xs, _))|
             (*e, xs.len() as f64)).collect();
     plot_tuples(&result);
         let mut peaks: Vec<JoinHandle<f64>> = Vec::new();
@@ -34,8 +53,8 @@ fn fn_eigenvalues(f_0: f64, f_0_s: f64) -> Vec<f64>{
             peaks.push(spawn( move || {
                 let mut e_start = p_e_start;
                 let mut e_end = p_e_end;
-                for _ in 0..5{
-                    let f = exermine_peak(100, 0.0, 200.0, 1.0, 1000000, 1.0, 0.0, e_start, e_end).iter()
+                for _ in 0..50{
+                    let f = exermine_peak(10, 0.0, 200.0, 1.0, 1000000, f_0, f_0_s, e_start, e_end).iter()
                         .map(|(e,(xs,_))| (*e, xs.len() as f64)).collect();
                     let peaks = find_peaks(&f);
                     if peaks.len() == 0 {
@@ -60,6 +79,7 @@ fn fn_eigenvalues(f_0: f64, f_0_s: f64) -> Vec<f64>{
                         e_end = peaks[0].1;
                     }
                 }
+                println!("{}, {}, {}", e_end, e_start, e_end - e_start);
                 0.5 * (e_start+ e_end)
             }));
         }
@@ -145,7 +165,7 @@ fn exermine_peak(many: usize, start_x: f64, end_x: f64, threshold: f64, steps: u
     (0..many).map(|e_m|{
         let my_e = (end_e - start_e) * e_m as f64 / many as f64 + start_e;
         (my_e , numerov(start_x, end_x, threshold, steps, y, y_s,
-            |x| my_e - x*x, |_| 0.0))}).collect::<Vec<_>>()
+            |x| my_e - x*x*x*x, |_| 0.0))}).collect::<Vec<_>>()
 }
 
 fn numerov<ST: FnMut(f64) -> f64, GT: FnMut(f64) -> f64>(x_0: f64, x_n: f64, thr: f64,
